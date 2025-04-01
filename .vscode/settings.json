@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "*.make": "makefile",
+        "typeinfo": "c",
+        "irx_imports.h": "c",
+        "acflash_common.h": "c",
+        "stdint.h": "c"
+    }
+}

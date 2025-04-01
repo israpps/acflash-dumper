@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ps2dev/ps2dev:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          apk add build-base git
+
+      - uses: actions/checkout@v4
+      - run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch --prune --unshallow
+
+      - name: Compile
+        run: |
+          make clean all
+
+      - name: Upload artifacts
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ACFLASH_DUMPER
+          path: |
+            ACFLASH_DUMPER.ELF
+
+#      - name: Create release
+#        if: github.ref == 'refs/heads/main'
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          prerelease: true
+#          generate_release_notes: true
+#          tag_name: "latest"
+#          body: "![dl](https://img.shields.io/github/downloads/israpps/acflash-dumper/latest/total?style=for-the-badge&logo=github)"
+#          files: |
+#            ACFLASH_DUMPER.ELF
