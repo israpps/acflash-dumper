@@ -9,6 +9,9 @@
  *  Copyright (c) 2025 Matias Israelson - MIT license                                                                   
  */
 
+ #ifdef CATCH_EXCEPTIONS
+ #include "exceptionman/exceptions.h"
+ #endif
 #include <kernel.h>
 #include <stdio.h>
 #include <iopheap.h>
@@ -111,11 +114,19 @@ int main(int argc, char** argv) {
     }
     if (loadmodules() == 0) {
         scr_setfontcolor(0xffffff);
-        dumpflash("acflash");
+        dumpflash("acflash:");
     }
     sleep(120);
+    
+#ifdef CATCH_EXCEPTIONS
+restoreExceptionHandlers();
+#endif
     return 0;
 tosleep:
+
+#ifdef CATCH_EXCEPTIONS
+restoreExceptionHandlers();
+#endif
     SleepThread();
 }
 int loadusb() {
@@ -194,9 +205,10 @@ int loadmodules() {
     }
     acflash_status.bcount = fileXioDevctl("acflash:", ACFLASH_FS_GET_BLOCKCONT, NULL, 0, NULL, 0);
     acflash_status.bsize = fileXioDevctl("acflash:", ACFLASH_FS_GET_BLOCKSIZE, NULL, 0, NULL, 0);
-    if (!acflash_status.bcount || !acflash_status.bsize) return -1;
     acflash_status.sizebytes = (acflash_status.bsize*acflash_status.bcount);
     scr_printf("\tFLASH: Block size:%d Blocks:%d (%d Bytes)\n", acflash_status.bsize, acflash_status.bcount, (acflash_status.bsize*acflash_status.bcount));
+    if (!acflash_status.bcount || !acflash_status.bsize) {scr_printf("\tError: invalid sizes in flash?\n"); return -1;}
+    if (acflash_status.sizebytes <= 0) {scr_printf("\tError: invalid sizes in flash?\n");return -1;}
     return 0;
 }
 
@@ -258,8 +270,10 @@ void scr_centerputs(const char* buf, char fillerbyte) {
     if(strlen(buf) % 2 != 0) scr_printf("\n");
 }
 
-
 void _ps2sdk_memory_init() {
+#ifdef CATCH_EXCEPTIONS
+    installExceptionHandlers();
+#endif
     sio_puts("# ACFLASH dumper start\n# BuilDate: "__DATE__ " " __TIME__ "\n");
     while (!SifIopRebootBuffer(ioprp, size_ioprp)) {}; //replace FILEIO
     while (!SifIopSync()) {};
