@@ -7,8 +7,9 @@
 # security dongle dumper for PlayStation2 based namco system 246/256
 
 EE_BIN = ACFLASH_DUMPER.ELF
+EE_OBJS_DIR = embed/
 EE_OBJS = main.o modelname.o ioprp.o pad.o \
-	usbd.o bdm.o bdmfs_fatfs.o usbmass_bd.o fileXio.o iomanX.o acflash.o acflash_fs.o
+	$(addprefix $(EE_OBJS_DIR), usbd.o bdm.o bdmfs_fatfs.o usbmass_bd.o fileXio.o iomanX.o acflash.o acflash_fs.o)
 
 DEBUG ?= 1
 EE_CFLAGS += -fdata-sections -ffunction-sections -DNEWLIB_PORT_AWARE
@@ -27,7 +28,6 @@ ifeq ($(EXCEPTION_HANDLER),1)
   EE_CFLAGS += -DCATCH_EXCEPTIONS
   EE_LIBS += -Lexceptionman -lexceptionman
 endif
-
 all: $(EE_BIN)
 
 clean:
