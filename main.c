@@ -40,6 +40,8 @@ int ModelNameInit(void);
 uint16_t getConsoleID();
 
 const char* flashdump_path = "mass:/2X6_FLASH_DUMP.BIN";
+#define MAX_FLASHNAME 128
+char flashname[MAX_FLASHNAME] = "?";
 
 typedef struct {
     int id;
@@ -205,8 +207,9 @@ int loadmodules() {
     }
     acflash_status.bcount = fileXioDevctl("acflash:", ACFLASH_FS_GET_BLOCKCONT, NULL, 0, NULL, 0);
     acflash_status.bsize = fileXioDevctl("acflash:", ACFLASH_FS_GET_BLOCKSIZE, NULL, 0, NULL, 0);
+    fileXioDevctl("acflash:", ACFLASH_GET_FLASH_TYPE, NULL, 0, &flashname, MAX_FLASHNAME);
     acflash_status.sizebytes = (acflash_status.bsize*acflash_status.bcount);
-    scr_printf("\tFLASH: Block size:%d Blocks:%d (%d Bytes)\n", acflash_status.bsize, acflash_status.bcount, (acflash_status.bsize*acflash_status.bcount));
+    scr_printf("\tFLASH: %s\n\t  - Block size:%d\n\t  - Blocks:%d\n\t  - Final Size: %d Bytes\n", flashname, acflash_status.bsize, acflash_status.bcount, (acflash_status.bsize*acflash_status.bcount));
     if (!acflash_status.bcount || !acflash_status.bsize) {scr_printf("\tError: invalid sizes in flash?\n"); return -1;}
     if (acflash_status.sizebytes <= 0) {scr_printf("\tError: invalid sizes in flash?\n");return -1;}
     return 0;

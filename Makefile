@@ -32,6 +32,7 @@ all: $(EE_BIN)
 
 clean:
 	rm -rf $(EE_OBJS) $(EE_BIN)
+	$(MAKE) -C iop/  clean 
 
 ioprp.img:
 	wget https://github.com/israpps/wLaunchELF_ISR/raw/system-2x6-support/iop/__precompiled/IOPRP_FILEIO.IMG -O $@
@@ -40,6 +41,8 @@ ioprp.img:
 	bin2c $< $@ ioprp
 
 iop/acflash_fs.irx: iop/acflash_fs/
+	$(MAKE) -C $<
+iop/acflash.irx: iop/acflash/
 	$(MAKE) -C $<
 
 vpath %.irx iop/
