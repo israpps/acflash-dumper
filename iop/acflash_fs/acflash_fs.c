@@ -83,6 +83,9 @@ int acflash_fs_devctl(iomanX_iop_file_t *fd, const char *name, int cmd, void *ar
     case ACFLASH_FS_REFRESH_FINFO:
         res = acFlashInfo(&acflash_info);
         break;
+    case ACFLASH_GET_FLASH_TYPE:
+        strcpy(buf, acFlashGetFlashType());
+        break;
     
     default:
         break;

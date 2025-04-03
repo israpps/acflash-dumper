@@ -3,6 +3,10 @@ I_iomanX_AddDrv
 I_iomanX_DelDrv
 iomanX_IMPORTS_end
 
+sysclib_IMPORTS_start
+I_strcpy
+sysclib_IMPORTS_end
+
 stdio_IMPORTS_start
 I_printf
 stdio_IMPORTS_end
@@ -13,4 +17,5 @@ I_acFlashErase
 I_acFlashProgram
 I_acFlashRead
 I_acFlashVerify
+DECLARE_IMPORT(16, acFlashGetFlashType)
 acflash_IMPORTS_end

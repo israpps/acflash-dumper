@@ -2,7 +2,7 @@
 #define IOP_IRX_IMPORTS_H
 
 #include "irx.h"
-
+extern char* acFlashGetFlashType();
 /* Please keep these in alphabetical order!  */
 #include "loadcore.h"
 #include "acflash.h"
