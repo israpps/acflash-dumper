@@ -14,7 +14,9 @@ stdio_IMPORTS_end
 acflash_IMPORTS_start
 I_acFlashInfo
 I_acFlashErase
+#ifdef ALLOW_WRITING
 I_acFlashProgram
+#endif
 I_acFlashRead
 I_acFlashVerify
 DECLARE_IMPORT(16, acFlashGetFlashType)

@@ -56,6 +56,7 @@ int acflash_fs_read(iomanX_iop_file_t *file, void *ptr, int size)
 }
 
 
+#ifdef ALLOW_WRITING
 int acflash_fs_write(iomanX_iop_file_t *file, void *ptr, int size)
 {
     FUNLOG();
@@ -64,6 +65,7 @@ int acflash_fs_write(iomanX_iop_file_t *file, void *ptr, int size)
     M_PRINTF("Written %d bytes from flash\n", bytes_written);
     return bytes_written;
 }
+#endif
 
 int acflash_fs_devctl(iomanX_iop_file_t *fd, const char *name, int cmd, void *arg, unsigned int arglen, void *buf, unsigned int buflen)
 {
@@ -147,7 +149,11 @@ static iomanX_iop_device_ops_t acflash_fio_ops =
 	(void*)&acflash_fs_open,    //open
 	(void*)&acflash_fs_close,   //close
 	&acflash_fs_read, //read
+#ifdef ALLOW_WRITING
 	&acflash_fs_write, //write
+#else
+    NOT_SUPPORTED_OP,
+#endif
 	&acflash_fs_lseek, //lseek
 	NOT_SUPPORTED_OP, //ioctl
 	NOT_SUPPORTED_OP, //remove

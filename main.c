@@ -225,7 +225,7 @@ int dumpflash(const char* path) {
     }
     infd = open(path, O_RDONLY);
     if (infd > 0) {
-        scr_printf("\t- Opened '%s:' now reading\n", path);
+        scr_printf("\t- Opened '%s:' now reading (fd:%d)\n", path, infd);
         readed = read(infd, FLASHBUF, acflash_status.sizebytes);
         if (readed != acflash_status.sizebytes) {
             scr_setfontcolor(0x0000FF);
