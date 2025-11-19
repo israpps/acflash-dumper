@@ -27,8 +27,12 @@ endif
 ifeq ($(EXCEPTION_HANDLER),1)
   EE_CFLAGS += -DCATCH_EXCEPTIONS
   EE_LIBS += -Lexceptionman -lexceptionman
+  DEPENDENCIES += exceptionman/libexceptionman.a
+exceptionman/libexceptionman.a: exceptionman/
+	$(MAKE) -C $<
+
 endif
-all: $(EE_BIN)
+all: $(DEPENDENCIES) $(EE_BIN) 
 
 clean:
 	rm -rf $(EE_OBJS) $(EE_BIN)
