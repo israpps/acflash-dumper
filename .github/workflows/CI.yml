@@ -24,17 +24,16 @@ jobs:
         if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ACFLASH_DUMPER
+          name: ACSRAM_DUMPER
           path: |
-            ACFLASH_DUMPER.ELF
+            ACSRAM_DUMPER.ELF
 
-#      - name: Create release
-#        if: github.ref == 'refs/heads/main'
-#        uses: softprops/action-gh-release@v2
-#        with:
-#          prerelease: true
-#          generate_release_notes: true
-#          tag_name: "latest"
-#          body: "![dl](https://img.shields.io/github/downloads/israpps/acflash-dumper/latest/total?style=for-the-badge&logo=github)"
-#          files: |
-#            ACFLASH_DUMPER.ELF
+      - name: Create pre-release
+        if: github.ref == 'refs/heads/acsram-dumper'
+        uses: mathieucarbou/marvinpinto-action-automatic-releases@latest
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "acsram"
+          title: "Namco System2x6 SRAM dumper"
+          files: |
+                ACSRAM_DUMPER.ELF

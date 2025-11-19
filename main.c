@@ -1,18 +1,22 @@
-/***
- *        ___   ______________    ___   _____ __  __   ____  __  ____  _______  __________ 
- *       /   | / ____/ ____/ /   /   | / ___// / / /  / __ \/ / / /  |/  / __ \/ ____/ __ \
- *      / /| |/ /   / /_  / /   / /| | \__ \/ /_/ /  / / / / / / / /|_/ / /_/ / __/ / /_/ /
- *     / ___ / /___/ __/ / /___/ ___ |___/ / __  /  / /_/ / /_/ / /  / / ____/ /___/ _, _/ 
- *    /_/  |_\____/_/   /_____/_/  |_/____/_/ /_/  /_____/\____/_/  /_/_/   /_____/_/ |_|  
- *        
- *  Namco System 2x6 FLASH dumper
- *  Copyright (c) 2025 Matias Israelson - MIT license                                                                   
+/**
+ *     ___________  ___  ___  ___  ______ _   ____  _________ ___________ 
+ *    /  ___| ___ \/ _ \ |  \/  |  |  _  \ | | |  \/  || ___ \  ___| ___ \
+ *    \ `--.| |_/ / /_\ \| .  . |  | | | | | | | .  . || |_/ / |__ | |_/ /
+ *     `--. \    /|  _  || |\/| |  | | | | | | | |\/| ||  __/|  __||    / 
+ *    /\__/ / |\ \| | | || |  | |  | |/ /| |_| | |  | || |   | |___| |\ \ 
+ *    \____/\_| \_\_| |_/\_|  |_/  |___/  \___/\_|  |_/\_|   \____/\_| \_|
+ *                                                                        
+ *  Namco System 2x6 SRAM dumper
+ *  Copyright (c) 2025 Matias Israelson - MIT license    
+ *                                                                        
  */
 
- #ifdef CATCH_EXCEPTIONS
- #include "exceptionman/exceptions.h"
- #endif
+#ifdef CATCH_EXCEPTIONS
+#include "exceptionman/exceptions.h"
+#endif
+#include <sifrpc-common.h>
 #include <kernel.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <iopheap.h>
 #include <errno.h>
@@ -31,28 +35,33 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "pad.h"
-#include "acflash_common.h"
-int dumpflash(const char* path);
+#include "iop/acsram_dumper/acsram_dumper.h"
+
+#define SRAM_SIZE 0x8000
+uint8_t SRAM[SRAM_SIZE];
+
+void genericgauge (float progress);
+void genericgaugepercent(int percent);
+void genericgaugepercentcalc(int curr, int max);
+
 const char *ModelNameGet(void);
+void hexdump(const void* data, uint32_t size, int hdr);
 void scr_centerputs(const char* buf, char fillerbyte);
 void scr_fillhalf(int size, char filler);
 int ModelNameInit(void);
 uint16_t getConsoleID();
 
-const char* flashdump_path = "mass:/2X6_FLASH_DUMP.BIN";
-#define MAX_FLASHNAME 128
-char flashname[MAX_FLASHNAME] = "?";
-
 typedef struct {
     int id;
     int ret;
 } modinfo_t;
-modinfo_t sio2man, mcman, mcserv, padman, usbd, bdm, fatfs, usbmass, acflash, acflash_fs, fileXio, iomanX, sec_checker;
+modinfo_t mmceman, sio2man, mcman, mcserv, padman, usbd, bdm, fatfs, usbmass, fileXio, iomanX, sec_checker, acsram, acsram_dumper;
 
 #define EXTERN_MODULE(_irx) extern unsigned char _irx[]; extern unsigned int size_##_irx
 EXTERN_MODULE(ioprp);
-EXTERN_MODULE(acflash_irx);
-EXTERN_MODULE(acflash_fs_irx);
+EXTERN_MODULE(mmceman_irx);
+EXTERN_MODULE(acsram_dumper_irx);
+EXTERN_MODULE(acsram_irx);
 EXTERN_MODULE(usbd_irx);
 EXTERN_MODULE(bdm_irx);
 EXTERN_MODULE(bdmfs_fatfs_irx);
@@ -65,15 +74,11 @@ EXTERN_MODULE(iomanX_irx);
 #define MODULE_OK(id, ret) (id >= 0 && ret == 0)
 #define INFORM(x) scr_setfontcolor(MODULE_OK(x.id, x.ret) ? 0x00cc00 : 0x0000cc);scr_printf("\t %s: id:%d ret:%d %s", #x, x.id, x.ret, MODULE_OK(x.id, x.ret) ? "(OK)\r" : "(ERR)\n")
 int loadusb();
+int dumpsram(const char* path);
+int checkfile(const char* path);
 
 char ROMVER[15];
 int loadmodules();
-
-struct acflashinfo {
-    int bsize;
-    int bcount;
-    int sizebytes;
-} acflash_status = {0,0,0};
 
 int main(int argc, char** argv) {
     sio_puts("# startup services");
@@ -86,7 +91,7 @@ int main(int argc, char** argv) {
     memset(ROMVER, 0, sizeof(ROMVER));
     GetRomName(ROMVER);
     scr_printf("\n\n");
-    scr_centerputs(" Namco System 246/256 flash dumper ", '=');
+    scr_centerputs(" Namco System 246/256 SRAM dumper ", '=');
     scr_centerputs(" Coded by El_isra ", ' ');
     scr_centerputs(" https://github.com/israpps/acflash-dumper ", ' ');
     scr_printf("\tROMVER:        %s\n", ROMVER);
@@ -102,8 +107,7 @@ int main(int argc, char** argv) {
         scr_printf("\tthis PS2 is NOT an arcade unit.\n\taborting...\n");
         goto tosleep;
     }
-    //if (!loadusb()) goto tosleep;
-    
+    if (!loadusb()) goto tosleep;
     iomanX.id = LOADMODULE(iomanX_irx, &iomanX.ret);
     INFORM(iomanX);
     fileXio.id = LOADMODULE(fileXio_irx, &fileXio.ret);
@@ -111,14 +115,17 @@ int main(int argc, char** argv) {
     if (MODULE_OK(fileXio.id, fileXio.ret)) {
         fileXioInit();
     } else {
-        scr_printf("\tFailed to load fileXio. aborting dump...\n");
-        goto tosleep;
+        //scr_printf("\tFailed to load fileXio. aborting dump...\n");
+        //goto tosleep;
     }
     if (loadmodules() == 0) {
         scr_setfontcolor(0xffffff);
-        dumpflash("acflash:");
-    }
-    sleep(120);
+        dumpsram("sram.bin");
+    } else printf("error on loadmodules()\n");
+    scr_printf("\n");
+    for (int i = 80; i > 0; i--, sleep(1))
+        scr_printf("\t>>> Program terminated: exiting in %d\r", i);
+
     
 #ifdef CATCH_EXCEPTIONS
 restoreExceptionHandlers();
@@ -154,6 +161,7 @@ int loadusb() {
 
         retries++;
     }
+#ifdef STRICT_MASS_AVAILABILITY
     if (ret != 0) {
         scr_printf("\t- error: 'mass:/' not found (%d)\n", ret);
         return 0;
@@ -161,6 +169,9 @@ int loadusb() {
         scr_printf("\t- found 'mass:/' after %d attempt%c\n", retries, (retries > 1) ? 's' : ' ');
         return 1;
     }
+#else
+    return 1;
+#endif
 }
 
 int loadmodules() {
@@ -184,82 +195,61 @@ int loadmodules() {
     if (!MODULE_OK(padman.id, padman.ret)) {
         return -1;
     }
-    PadInitPads();
+    //PadInitPads();
     sec_checker.id = LOADMODULEFILE("rom0:DAEMON", &sec_checker.ret);
     INFORM(sec_checker);
     if (!MODULE_OK(sec_checker.id, sec_checker.ret)) {
         scr_printf("\tfailed to load rom0:DAEMON!!!\n");
         return -1;
     }
-
-
-    acflash.id =  LOADMODULE(acflash_irx, &acflash.ret); // modified genvmc module that auths card with I_McDetectCard2. this should reset the watchdog before begining dump
-    INFORM(acflash);
-    if (!MODULE_OK(acflash.id, acflash.ret)) {
-        if (acflash.ret == -16) scr_printf("\n\tACFLASH.IRX: Invalid FLASH Status\n");
-        if (acflash.ret == -06) scr_printf("\n\tACFLASH.IRX: FLASH Not found\n");
+    mmceman.id = LOADMODULE(mmceman_irx, &mmceman.ret);
+    INFORM(mmceman);
+    acsram.id = LOADMODULE(acsram_irx, &acsram.ret);
+    INFORM(acsram);
+    acsram_dumper.id = LOADMODULE(acsram_dumper_irx, &acsram_dumper.ret);
+    INFORM(acsram_dumper);
+    if (acsram_dumper_init() != 0) {
+        scr_printf("\tCannot bind RPC service to acsram_dumper.irx\n");
         return -1;
     }
-    acflash_fs.id =  LOADMODULE(acflash_fs_irx, &acflash_fs.ret); // modified genvmc module that auths card with I_McDetectCard2. this should reset the watchdog before begining dump
-    INFORM(acflash_fs);
-    if (!MODULE_OK(acflash_fs.id, acflash_fs.ret)) {
-        return -1;
-    }
-    acflash_status.bcount = fileXioDevctl("acflash:", ACFLASH_FS_GET_BLOCKCONT, NULL, 0, NULL, 0);
-    acflash_status.bsize = fileXioDevctl("acflash:", ACFLASH_FS_GET_BLOCKSIZE, NULL, 0, NULL, 0);
-    fileXioDevctl("acflash:", ACFLASH_GET_FLASH_TYPE, NULL, 0, &flashname, MAX_FLASHNAME);
-    acflash_status.sizebytes = (acflash_status.bsize*acflash_status.bcount);
-    scr_printf("\tFLASH: %s\n\t  - Block size:%d\n\t  - Blocks:%d\n\t  - Final Size: %d Bytes\n", flashname, acflash_status.bsize, acflash_status.bcount, (acflash_status.bsize*acflash_status.bcount));
-    if (!acflash_status.bcount || !acflash_status.bsize) {scr_printf("\tError: invalid sizes in flash?\n"); return -1;}
-    if (acflash_status.sizebytes <= 0) {scr_printf("\tError: invalid sizes in flash?\n");return -1;}
+
     return 0;
 }
 
-int dumpflash(const char* path) {
-    int ret = 0, infd, outfd, written = 0, readed = 0;
-    uint8_t *FLASHBUF = malloc(acflash_status.sizebytes);
-    if (FLASHBUF == NULL) {
-        scr_setfontcolor(0x0000FF);
-        scr_printf("\tError: Could not Allocate %d bytes for reading the flash\n", acflash_status.sizebytes);
-        return -ENOMEM;
+int dumpsram(const char* path) {
+    scr_printf("\n\t>>> reading SRAM...\n");
+    printf("\n\tdumping SRAM to '%s'\n", path);
+    int r, fd;
+    int readed = 0, written;
+    while (readed < SRAM_SIZE)
+    {
+        readed += dump_sram(&SRAM[readed], ACSRAM_DUMP_MAXCHUNK_SIZE, readed);
+        scr_printf("  %04X", readed);
+        genericgaugepercentcalc(readed, SRAM_SIZE);
+        sleep(1);
     }
-    infd = open(path, O_RDONLY);
-    if (infd > 0) {
-        scr_printf("\t- Opened '%s:' now reading (fd:%d)\n", path, infd);
-        readed = read(infd, FLASHBUF, acflash_status.sizebytes);
-        if (readed != acflash_status.sizebytes) {
-            scr_setfontcolor(0x0000FF);
-            scr_printf("\tError: Could not read whole flash size (readed:%d | Size:%d)\n", readed, acflash_status.sizebytes);
-            ret = -EIO;
+    scr_printf("\n\tSRAM Read complete\n");
+    
+#ifndef NO_HEXDUMP
+    hexdump(SRAM, sizeof(SRAM), 1);
+#endif
+    fd = open(path, O_WRONLY|O_CREAT|O_TRUNC);
+    scr_printf("\tdumping SRAM to file '%s'\n", path);
+    if (fd > 0) {
+        written = write(fd, SRAM, SRAM_SIZE);
+        if (written != SRAM_SIZE) {
+            scr_printf("\tI/O ERROR: written 0x%X bytes to file instead of 0x%X\n", written, SRAM_SIZE);
+            r = -1;
         } else {
-            scr_printf("\t- Readed %d Bytes from the flash\n", readed);
-            if (!strncmp("RESET", FLASHBUF, sizeof("RESET"))) {
-                scr_setfontcolor(0x00FFFF);
-                scr_printf("\t- INFO: ROMFS 'RESET' magic found at begining of FLASH\n");
-                scr_setfontcolor(0xFFFFFF);
-            }
-            scr_printf("\t- Opening output file '%s'\n", flashdump_path);
-            outfd = open(flashdump_path, O_WRONLY | O_CREAT | O_TRUNC);
-            if (outfd > 0) {
-                written = write(outfd, FLASHBUF, acflash_status.sizebytes);
-                if (written != acflash_status.sizebytes) {
-                    scr_setfontcolor(0x0000FF);
-                    scr_printf("\tError: Could not Write whole flash size to USB (written:%d | Size:%d)\n", written, acflash_status.sizebytes);
-                    ret = -EIO;
-                } else {
-                    scr_printf("\t- SUCCESS: Written whole flash to file\n");
-                    close(outfd);
-                }
-            } else {
-                scr_setfontcolor(0x0000FF);
-                scr_printf("\tError: Could Not open file for dumping flash\n");
-                ret = outfd;
-            }
+            scr_printf("\tfile dumped!\n\tremember: running this program again overwrites the dump\n");
+            r = 0;
         }
-        close(infd);
-    } else {ret = infd; scr_printf("\tFailed to open 'acflash'\n");}
-    if (FLASHBUF) free(FLASHBUF);
-    return ret;
+        close(fd);
+    } else {
+        scr_printf("\tI/O ERROR: Could not open '%s'\n", path);
+        r = -1;
+    }
+    return r;
 }
 
 void scr_fillhalf(int size, char filler) {
@@ -277,9 +267,84 @@ void _ps2sdk_memory_init() {
 #ifdef CATCH_EXCEPTIONS
     installExceptionHandlers();
 #endif
-    sio_puts("# ACFLASH dumper start\n# BuilDate: "__DATE__ " " __TIME__ "\n");
-    while (!SifIopRebootBuffer(ioprp, size_ioprp)) {}; //replace FILEIO
+    sio_puts("# SRAM dumper start\n# BuilDate: "__DATE__ " " __TIME__ "\n");
+    while (!SifIopRebootBuffer(ioprp, size_ioprp)) {}; //replace FILEIO to avoid RPC hang
+    memset(SRAM, 0, SRAM_SIZE); //between the IOPRP reboot and IOP Sync we can do things on the EE to save time, while we wait for reboot finish
     while (!SifIopSync()) {};
-    SifLoadStartModule("rom0:CDVDFSV", 0, NULL, NULL);
-    SifLoadStartModule("rom0:ACDEV", 0, NULL, NULL); // just in case
+    SifLoadStartModule("rom0:CDVDFSV", 0, NULL, NULL); // bring back CDVDMAN RPC to avoid hangs on libcglue library
+}
+
+
+int checkfile(const char* path) {
+    int fd = open(path, O_RDONLY);
+    int r = (fd > 0);
+    if (r) close(fd);
+    return r;
+}
+
+
+void hexdump(const void* data, uint32_t size, int hdr) {
+    char ascii[17];
+    uint32_t i, j;
+    ascii[16] = '\0';
+    if (hdr) {
+        for (i = 0; i < 16; i++) {
+            if (i == 8)
+                printf(" ");
+            printf("%02X ", i);
+        }
+        printf("\n");
+        for (i = 0; i < 23; i++)
+            printf("---");
+        printf("\n");
+    }
+
+    for (i = 0; i < size; ++i) {
+        printf("%02X ", ((unsigned char*) data)[i]);
+        if (((unsigned char*) data)[i] >= ' ' && ((unsigned char*) data)[i] <= '~') {
+            ascii[i % 16] = ((unsigned char*) data)[i];
+        } else {
+            ascii[i % 16] = '.';
+        }
+        if ((i + 1) % 8 == 0 || i + 1 == size) {
+            printf(" ");
+            if ((i + 1) % 16 == 0) {
+                printf("|  %s \n", ascii);
+            } else if (i + 1 == size) {
+                ascii[(i + 1) % 16] = '\0';
+                if ((i + 1) % 16 <= 8) {
+                    printf(" ");
+                }
+                for (j = (i + 1) % 16; j < 16; ++j) {
+                    printf("   ");
+                }
+                printf("|  %s \n", ascii);
+            }
+        }
+    }
+}
+
+void genericgaugepercentcalc(int curr, int max) {
+    genericgaugepercent((curr*100/(float)max));
+}
+void genericgaugepercent(int percent) {
+    genericgauge(percent*0.01);
+}
+
+void genericgauge (float progress) {
+    int barWidth = 70;
+
+    scr_printf("[");
+    int pos = barWidth * progress;
+    for (int i = 0; i < barWidth; ++i)
+    {
+      if (i < pos)
+        scr_printf("=");
+      else if (i == pos)
+        scr_printf(">");
+      else
+        scr_printf(" ");
+    }
+
+    scr_printf("]\r");
 }

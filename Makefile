@@ -6,10 +6,10 @@
 #                       |___/                               |_|
 # security dongle dumper for PlayStation2 based namco system 246/256
 
-EE_BIN = ACFLASH_DUMPER.ELF
+EE_BIN = ACSRAM_DUMPER.ELF
 EE_OBJS_DIR = embed/
-EE_OBJS = main.o modelname.o ioprp.o pad.o \
-	$(addprefix $(EE_OBJS_DIR), usbd.o bdm.o bdmfs_fatfs.o usbmass_bd.o fileXio.o iomanX.o acflash.o acflash_fs.o)
+EE_OBJS = main.o modelname.o ioprp.o pad.o iop/acsram_dumper/ee_rpc.o \
+	$(addprefix $(EE_OBJS_DIR), usbd.o bdm.o bdmfs_fatfs.o usbmass_bd.o fileXio.o iomanX.o acsram.o acsram_dumper.o mmceman.o)
 
 DEBUG ?= 1
 EE_CFLAGS += -fdata-sections -ffunction-sections -DNEWLIB_PORT_AWARE
@@ -32,7 +32,7 @@ all: $(EE_BIN)
 
 clean:
 	rm -rf $(EE_OBJS) $(EE_BIN)
-	$(MAKE) -C iop/  clean 
+	$(MAKE) -C iop/ clean 
 
 ioprp.img:
 	wget https://github.com/israpps/wLaunchELF_ISR/raw/system-2x6-support/iop/__precompiled/IOPRP_FILEIO.IMG -O $@
@@ -40,10 +40,13 @@ ioprp.img:
 %.c: %.img
 	bin2c $< $@ ioprp
 
-iop/acflash_fs.irx: iop/acflash_fs/
-	$(MAKE) -C $<
-iop/acflash.irx: iop/acflash/
-	$(MAKE) -C $<
+.PHONY: iop/acsram_dumper.irx
+
+iop/acsram_dumper.irx: iop/acsram_dumper/main.c
+	$(MAKE) -C iop/acsram_dumper/
+
+iop/mmceman.irx:
+	wget https://github.com/ps2-mmce/mmceman/releases/download/latest/mmceman.irx -O "$@"
 
 vpath %.irx iop/
 vpath %.irx $(PS2SDK)/iop/irx/

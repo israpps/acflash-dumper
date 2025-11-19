@@ -1,7 +1,5 @@
 all:
-	$(MAKE) -C acflash all
-	$(MAKE) -C acflash_fs all
+	$(MAKE) -C acsram_dumper all
 
 clean:
-	$(MAKE) -C acflash clean
-	$(MAKE) -C acflash_fs clean
+	$(MAKE) -C acsram_dumper clean
